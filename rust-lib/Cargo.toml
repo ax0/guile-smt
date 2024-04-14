@@ -1,0 +1,15 @@
+[package]
+name = "libguile_smt_hash"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "guile_smt_hash"
+crate-type = ["cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ark-ff = "0.4.2"
+lazy_static = "1.4.0"
+zkhash = { git = "https://github.com/HorizenLabs/poseidon2" }

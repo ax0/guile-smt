@@ -1,0 +1,108 @@
+#+TITLE: guile-smt
+
+* Description
+This library provides a Scheme implementation of (optimised) sparse Merkle trees. It provides flexibility to allow for different database backends and data types representing keys, values and hashes. Example instances are provided.
+
+* Dependencies
+~guile-gdbm~ must be installed to make use of the provided gdbm backend, which may be accomplished via Guix as follows:
+#+BEGIN_SRC sh
+  guix install guile-gdbm
+#+END_SRC
+
+To make use of the Poseidon2 hash function, the provided Rust library under ~rust-lib~ must be installed as follows before compilation:
+#+BEGIN_SRC sh
+    cd rust-lib
+    cargo build --release
+    cp target/release/libguile_smt_hash.so /usr/local/lib
+#+END_SRC
+
+* Installation
+This library requires Guile 3.0 and makes use of the GNU build system. It may be installed via the usual incantations:
+#+BEGIN_SRC sh
+  ./autogen.sh && ./configure && make && make install
+#+END_SRC
+
+Alternatively, it may be installed via Guix
+#+BEGIN_SRC sh
+  guix package -f guix.scm
+#+END_SRC
+or run directly from the root of the source tree if it is added to Guile's load path:
+#+BEGIN_SRC scheme
+  (add-to-load-path "path/to/library")
+#+END_SRC
+
+* Example usage
+Assuming the library has been installed, it must first be imported.
+
+#+BEGIN_SRC scheme
+  (import (smt))
+#+END_SRC
+
+To create an SMT, we need to settle on a suitable instance declaring the maximum depth, types of the keys, values and hashes, rules for decomposition of keys into bits and hashing leaves and branches, as well as a choice of database backend. For this example, we construct a tree with maximum depth 3 and assume keys, values and hashes belong to the BN254 field, the hash functions are a variation on Poseidon2, the bit decompositionm follows the little-endian convention and the database backend is GDBM:
+
+#+BEGIN_SRC scheme
+  (import (only (gdbm) GDBM_WRCREAT))
+  (import (smt db))
+  (import (smt db gdbm))
+  (import (only (smt instance bn254) bn254-number-max))
+  (import (smt instance bn254 poseidon2))
+
+  (define max-depth 3)
+  (define path "/tmp/smt-db")
+
+  (define smt-db (make-gdbm-smt-number-db path bn254-number-max GDBM_WRCREAT))
+  (define smt (make-bn254-poseidon2-smt smt-db max-depth))
+#+END_SRC
+
+Now we can 'open' the SMT, query its root and operate on it.
+
+#+BEGIN_SRC scheme
+  (smt-open smt)
+  (smt-root smt) ; => #f
+  (smt-insert! smt 1 10) ; => #t
+  (smt-root smt) ; => 4513210397522006730816023179256183379681966408432157168587329883537000929139
+  (smt-insert! smt 1 20) ; => #f
+  (smt-update! smt 1 20) ; => #t
+  (smt-delete! smt 1) ; => #t
+  (smt-insert smt 1 20) ; => #t
+  (smt-root smt) ; => 10372189932729262283967199017720168177237120999903394382855392965770208195324
+  (smt-insert! smt 2 0) ; => #t
+  (smt-root smt) ; => 9223664494056161969549044199639614757313467307292508359200270915420809984888 
+#+END_SRC
+
+We might want to prove inclusion of the key 1.
+
+#+BEGIN_SRC scheme
+  (import (smt proof))
+  (define proof (smt-get-proof smt 1)) ; => #<<smt-proof> ...>
+  (smt-inclusion-proof? proof) ; => #t
+  (smt-proof-value proof) ; => 20
+  (smt-proof-siblings proof) ; => (5759019188610330458549442238467183789534934764552910263776295490353516021492)
+#+END_SRC
+
+We can inspect nodes by looking up their hashes:
+
+#+BEGIN_SRC scheme
+  (define node (smt-ref smt 5759019188610330458549442238467183789534934764552910263776295490353516021492)) ; => #<<leaf> key: 2 value: 0>
+#+END_SRC
+
+Leaf and branch values may be extracted:
+
+#+BEGIN_SRC scheme
+  (import (smt types))
+  (leaf-key node) ; => 2
+  (leaf-value node) ; => 0
+#+END_SRC
+
+We could have also looked the key up directly:
+
+#+BEGIN_SRC scheme
+  (smt-key-ref smt 2) ; => 0
+  (smt-key-ref smt 3) ; => #f
+#+END_SRC
+
+When we are done, we should 'close' the SMT.
+
+#+BEGIN_SRC scheme
+  (smt-close smt)
+#+END_SRC
