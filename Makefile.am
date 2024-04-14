@@ -1,4 +1,4 @@
-include build-ax/guile.am
+include build-aux/guile.am
 
 SOURCES =					\
 	smt.sld					\
